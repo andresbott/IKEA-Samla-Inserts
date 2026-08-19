@@ -12,6 +12,9 @@ Cell_columns = 2; // [1:10]
 // Amount of cells in smaller box dimension
 Cell_rows = 2; // [1:10]
 
+// Exact clear width (mm) per column at the bottom, left to right. Put 0 for a column to auto-size it (it shares the leftover space). Leave empty [] for all-equal columns (original behaviour).
+Column_widths = [];
+
 /* [Layer marking] */
 Layer_marking = "false"; // ["false":false, "inside":inside, "outside":outside]
 
@@ -189,16 +192,73 @@ module Samla_Content(layer, width, depth, height, scale_width, scale_depth, widt
     }
 }
 
+// ---- Custom column widths (Column_widths) --------------------------------
+// Column_widths[0] is the LEFT-most column of the generated piece: the left
+// border for a full insert, the centre cut for a halve_column/quarter piece.
+// Values are inner (clear) compartment widths in mm; 0 = auto (share leftover).
+//
+// Column_widths padded/truncated to `cols` entries (missing entries = 0 = auto).
+function _cols_specs(cols) = [ for (i=[0:cols-1]) i < len(Column_widths) ? Column_widths[i] : 0 ];
+function _sum_pos(v, i=0) = i >= len(v) ? 0 : (v[i] > 0 ? v[i] : 0) + _sum_pos(v, i+1);
+function _count_auto(v, i=0) = i >= len(v) ? 0 : (v[i] > 0 ? 0 : 1) + _count_auto(v, i+1);
+function _cumsum(v, k) = k <= 0 ? 0 : v[k-1] + _cumsum(v, k-1);
+// Resolve concrete clear widths from specs, given the total usable clear span.
+// Auto/0 columns evenly share whatever space the fixed columns leave over.
+function _resolve_widths(specs, usable, inner) =
+    let(
+        cols = len(specs),
+        totalClear = usable - (cols-1)*inner,
+        autoN = _count_auto(specs),
+        autoW = autoN > 0 ? (totalClear - _sum_pos(specs)) / autoN : 0
+    )
+    [ for (s = specs) s > 0 ? s : autoW ];
+// Interior wall centre positions, laid out from `start` in the +axis direction.
+function _wall_positions(start, w, inner) =
+    [ for (k=[1:len(w)-1]) start + _cumsum(w, k) + (k - 0.5)*inner ];
+
+// Full insert: columns are symmetric about x=0; the clear span is measured
+// inside the outer wall on both borders.
+function _cols_full_usable(width) = width - 2*Additional_spacing - 2*Outer_wall_thickness;
+function _cols_full_widths(cols, width, inner) =
+    _resolve_widths(_cols_specs(cols), _cols_full_usable(width), inner);
+function _cols_full_walls(cols, width, inner) =
+    _wall_positions(-_cols_full_usable(width)/2, _cols_full_widths(cols, width, inner), inner);
+
+// Half insert (halve_column / quarter): columns are anchored at the centre cut
+// and grow toward the border, so the auto/leftover column lands at the border.
+// Span runs from the inner face of the centre wall to that of the border wall.
+function _cols_half_start(width) = Additional_spacing/2 + Outer_wall_thickness;
+function _cols_half_usable(width) = (width/2 - Additional_spacing - Outer_wall_thickness) - _cols_half_start(width);
+function _cols_half_widths(cols, width, inner) =
+    _resolve_widths(_cols_specs(cols), _cols_half_usable(width), inner);
+function _cols_half_walls(cols, width, inner) =
+    _wall_positions(_cols_half_start(width), _cols_half_widths(cols, width, inner), inner);
+
 module Grid(layer, width, depth, height, columns, rows, Wall_thickness, scale_width, scale_depth) {
     if (Part == "false" || Part == "halve_row") {
-
-        for (i=[-(columns/2-1):1:columns/2-1]) {
+        if (len(Column_widths) > 0) {
+            if (min(_cols_full_widths(columns, width, Wall_thickness)) <= 0)
+                echo("WARNING: Column_widths leave no room for the auto/leftover column(s).");
+            for (x = _cols_full_walls(columns, width, Wall_thickness)) {
+                translate([x, 0, height/2])
+                    cube([Wall_thickness, depth*scale_depth, height], true);
+            }
+        }
+        else for (i=[-(columns/2-1):1:columns/2-1]) {
             translate([i*((width-Wall_thickness-2*Additional_spacing)/columns), 0, height/2])
                 cube([Wall_thickness, depth*scale_depth, height], true);
         }
     }
     else if (Part == "halve_column" || Part == "quarter") {
-        for (i=[0:1:columns-1]) {
+        if (len(Column_widths) > 0) {
+            if (min(_cols_half_widths(columns, width, Wall_thickness)) <= 0)
+                echo("WARNING: Column_widths leave no room for the auto/leftover column(s).");
+            for (x = _cols_half_walls(columns, width, Wall_thickness)) {
+                translate([x, 0, height/2])
+                    cube([Wall_thickness, depth*scale_depth, height], true);
+            }
+        }
+        else for (i=[0:1:columns-1]) {
             translate([i*((width-Wall_thickness-2*Additional_spacing)/2/columns), 0, height/2])
                 cube([Wall_thickness, depth*scale_depth, height], true);
         }
