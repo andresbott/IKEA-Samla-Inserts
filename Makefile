@@ -13,10 +13,20 @@ FILES_DIR  := files
 # OpenSCAD $fn for the final render (CLI is never $preview, so this is the real one)
 RESOLUTION ?= 64
 
-# Wall / floor thickness in mm — shared by every group ("same wall settings").
-INNER_WALL ?= 1.2
-OUTER_WALL ?= 1.8
-FLOOR      ?= 1
+# Wall / floor settings — shared by every group ("same wall settings").
+# Walls are a whole number of perimeter lines so the slicer lays clean perimeters
+# with no slow gap fill. The SCAD derives the thickness via the PrusaSlicer/Orca
+# flow model: w = LINE_WIDTH (0 = auto, 1.125 x NOZZLE), spacing = w - LAYER_HEIGHT*(1-pi/4),
+# thickness(N) = w + (N-1)*spacing. With 0.4/auto/0.2: 3 lines ~1.26 mm, 4 lines ~1.67 mm.
+# Set LINE_WIDTH to your slicer's perimeter width if it isn't the PrusaSlicer default.
+NOZZLE           ?= 0.4
+LINE_WIDTH       ?= 0
+LAYER_HEIGHT     ?= 0.2
+INNER_WALL_LINES ?= 3
+OUTER_WALL_LINES ?= 4
+# Floor in mm (1 = 5 x 0.2 mm layers).
+FLOOR            ?= 1
+WALL_PARAMS = Nozzle_size=$(NOZZLE);Line_width=$(LINE_WIDTH);Layer_height=$(LAYER_HEIGHT);Inner_wall_lines=$(INNER_WALL_LINES);Outer_wall_lines=$(OUTER_WALL_LINES)
 
 # Preview-image settings (%.png rule: OpenSCAD render -> ImageMagick trim + margin).
 IMG_SIZE   ?= 1600,1600
@@ -43,7 +53,7 @@ MTG_DIR    := $(FILES_DIR)/mtg
 MTG_BOX    := 11
 # Layer_marking: false | inside | outside
 MTG_MARK   := false
-MTG_COMMON = Box_size="$(MTG_BOX)";Inner_wall_thickness=$(INNER_WALL);Outer_wall_thickness=$(OUTER_WALL);Bottom_thickness=$(FLOOR);Layer_marking="$(MTG_MARK)";Resolution=$(RESOLUTION)
+MTG_COMMON = Box_size="$(MTG_BOX)";$(WALL_PARAMS);Bottom_thickness=$(FLOOR);Layer_marking="$(MTG_MARK)";Resolution=$(RESOLUTION)
 
 # -- Bottom section: 24-layer scheme, combine 4 (a 5-layer-tall slab at layer 1),
 #    halved by column, one open column.
@@ -101,7 +111,7 @@ STORAGE_SPACING := 2.5
 # s11_height = 118, which fills the box to the rim). 116 -> 58 mm per 2-layer piece.
 STORAGE_HEIGHT := 116
 # per-piece PARAMS add Layers/Active_layer/Cell_columns/Cell_rows on top of this.
-STORAGE_COMMON = Box_size="$(STORAGE_BOX)";s11_height=$(STORAGE_HEIGHT);Combine_layers=0;Part="$(STORAGE_PART)";Column_widths=[];Additional_spacing=$(STORAGE_SPACING);Inner_wall_thickness=$(INNER_WALL);Outer_wall_thickness=$(OUTER_WALL);Bottom_thickness=$(FLOOR);Layer_marking="false";Resolution=$(RESOLUTION)
+STORAGE_COMMON = Box_size="$(STORAGE_BOX)";s11_height=$(STORAGE_HEIGHT);Combine_layers=0;Part="$(STORAGE_PART)";Column_widths=[];Additional_spacing=$(STORAGE_SPACING);$(WALL_PARAMS);Bottom_thickness=$(FLOOR);Layer_marking="false";Resolution=$(RESOLUTION)
 
 # storage_piece,<layers>,<active>,<cols>,<rows> -> declares one .stl + shared PARAMS.
 define storage_piece
