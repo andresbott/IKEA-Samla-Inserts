@@ -40,10 +40,25 @@ Generation = "complete"; // ["complete":complete, "gridbottom":grid + bottom, "g
 // Combines active layer with N layers above
 Combine_layers = 0; // [0:10]
 
-// Inner wall thickness is for the grid. Adjust to your nozzle extrusion width.
+// Nozzle diameter in mm (used for the auto line width)
+Nozzle_size = 0.4; // [0.2:0.05:1.2]
+
+// Perimeter extrusion width in mm. 0 = auto (1.125 x Nozzle_size, PrusaSlicer default); otherwise set your slicer's perimeter width
+Line_width = 0; // [0:0.01:1.5]
+
+// Layer height in mm (affects perimeter spacing in the slicer flow model)
+Layer_height = 0.2; // [0.05:0.01:0.6]
+
+// Number of perimeter lines for the grid walls. 0 = use Inner_wall_thickness below
+Inner_wall_lines = 0; // [0:1:10]
+
+// Number of perimeter lines for the outer wall. 0 = use Outer_wall_thickness below
+Outer_wall_lines = 0; // [0:1:10]
+
+// Inner wall thickness is for the grid (manual fallback when Inner_wall_lines = 0). Adjust to your nozzle extrusion width.
 Inner_wall_thickness = 0.75;
 
-// Outer wall thickness is for the outside. Adjust to your nozzle extrusion width.
+// Outer wall thickness is for the outside (manual fallback when Outer_wall_lines = 0). Adjust to your nozzle extrusion width.
 Outer_wall_thickness = 1.3;
 
 // Adjust to your first layer height and layer height
@@ -114,6 +129,17 @@ s22_diameter = 18;
 s22_diameter2 = 12;
 
 Resolution = $preview ? 32 : 64;
+
+// Wall thickness from a whole number of perimeter lines (PrusaSlicer/OrcaSlicer flow model):
+// adjacent perimeters overlap by Layer_height*(1-PI/4), so N lines = w + (N-1)*spacing.
+line_w       = Line_width > 0 ? Line_width : 1.125 * Nozzle_size;
+line_spacing = line_w - Layer_height * (1 - PI/4);
+function wall_thickness_for_lines(n) = line_w + (n - 1) * line_spacing;
+inner_wall = Inner_wall_lines > 0 ? wall_thickness_for_lines(Inner_wall_lines) : Inner_wall_thickness;
+outer_wall = Outer_wall_lines > 0 ? wall_thickness_for_lines(Outer_wall_lines) : Outer_wall_thickness;
+echo(str("Walls: inner=", inner_wall, " mm (", Inner_wall_lines > 0 ? str(Inner_wall_lines, " lines") : "manual",
+         "), outer=", outer_wall, " mm (", Outer_wall_lines > 0 ? str(Outer_wall_lines, " lines") : "manual",
+         "), line width=", line_w, " mm, spacing=", line_spacing, " mm"));
 
 module Samla_Base(layer, width, depth, height, diameter, width_cutout, scale_cutout, $fn = Resolution) {
     hull() {
@@ -218,7 +244,7 @@ function _wall_positions(start, w, inner) =
 
 // Full insert: columns are symmetric about x=0; the clear span is measured
 // inside the outer wall on both borders.
-function _cols_full_usable(width) = width - 2*Additional_spacing - 2*Outer_wall_thickness;
+function _cols_full_usable(width) = width - 2*Additional_spacing - 2*outer_wall;
 function _cols_full_widths(cols, width, inner) =
     _resolve_widths(_cols_specs(cols), _cols_full_usable(width), inner);
 function _cols_full_walls(cols, width, inner) =
@@ -227,8 +253,8 @@ function _cols_full_walls(cols, width, inner) =
 // Half insert (halve_column / quarter): columns are anchored at the centre cut
 // and grow toward the border, so the auto/leftover column lands at the border.
 // Span runs from the inner face of the centre wall to that of the border wall.
-function _cols_half_start(width) = Additional_spacing/2 + Outer_wall_thickness;
-function _cols_half_usable(width) = (width/2 - Additional_spacing - Outer_wall_thickness) - _cols_half_start(width);
+function _cols_half_start(width) = Additional_spacing/2 + outer_wall;
+function _cols_half_usable(width) = (width/2 - Additional_spacing - outer_wall) - _cols_half_start(width);
 function _cols_half_widths(cols, width, inner) =
     _resolve_widths(_cols_specs(cols), _cols_half_usable(width), inner);
 function _cols_half_walls(cols, width, inner) =
@@ -450,7 +476,7 @@ module Samla_Insert(layer, width, depth, height, scale_width, scale_depth, width
                     if (Cell_columns>1 || Cell_rows>1) {
                         intersection() {
                             Samla_Content(layer, width, depth, height, scale_width, scale_depth, width_handle, depth_handle, width_cutout, depth_cutout, scale_handle, scale_cutout, handle_cutout_height, diameter, diameter2, 0);
-                            Grid(layer, width, depth, height, Cell_columns, Cell_rows, Inner_wall_thickness, scale_width, scale_depth);
+                            Grid(layer, width, depth, height, Cell_columns, Cell_rows, inner_wall, scale_width, scale_depth);
                         }
                     }
                     // generate bottom
@@ -466,14 +492,14 @@ module Samla_Insert(layer, width, depth, height, scale_width, scale_depth, width
                     if (Generation == "complete") {
                         difference() {
                             Samla_Content(layer, width, depth, height, scale_width, scale_depth, width_handle, depth_handle, width_cutout, depth_cutout, scale_handle, scale_cutout, handle_cutout_height, diameter, diameter2, 0);
-                            Samla_Content(layer, width, depth, height, scale_width, scale_depth, width_handle, depth_handle, width_cutout, depth_cutout, scale_handle, scale_cutout, handle_cutout_height, diameter, diameter2, -Outer_wall_thickness);
+                            Samla_Content(layer, width, depth, height, scale_width, scale_depth, width_handle, depth_handle, width_cutout, depth_cutout, scale_handle, scale_cutout, handle_cutout_height, diameter, diameter2, -outer_wall);
                         }
                     }
                     // generate fillets
                     if (Fillets != "false") {
                         intersection() {
                             Samla_Content(layer, width, depth, height, scale_width, scale_depth, width_handle, depth_handle, width_cutout, depth_cutout, scale_handle, scale_cutout, handle_cutout_height, diameter, diameter2, 0);
-                            Fillets(layer, width, depth, height, Cell_columns, Cell_rows, Inner_wall_thickness, scale_width, scale_depth);
+                            Fillets(layer, width, depth, height, Cell_columns, Cell_rows, inner_wall, scale_width, scale_depth);
                         }
                     }
                 }
