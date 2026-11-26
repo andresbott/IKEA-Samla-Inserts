@@ -97,8 +97,11 @@ STORAGE_4L_GRIDS := $(STORAGE_GRIDS) 3x3
 # default (1) so the widest (top) layer fits the bed: each +1 shrinks the top
 # layer ~2.2 mm in depth and ~1.1 mm in width.
 STORAGE_SPACING := 2.5
+# Total stack height in mm, split evenly across layers (overrides the SCAD's
+# s11_height = 118, which fills the box to the rim). 116 -> 58 mm per 2-layer piece.
+STORAGE_HEIGHT := 116
 # per-piece PARAMS add Layers/Active_layer/Cell_columns/Cell_rows on top of this.
-STORAGE_COMMON = Box_size="$(STORAGE_BOX)";Combine_layers=0;Part="$(STORAGE_PART)";Column_widths=[];Additional_spacing=$(STORAGE_SPACING);Inner_wall_thickness=$(INNER_WALL);Outer_wall_thickness=$(OUTER_WALL);Bottom_thickness=$(FLOOR);Layer_marking="false";Resolution=$(RESOLUTION)
+STORAGE_COMMON = Box_size="$(STORAGE_BOX)";s11_height=$(STORAGE_HEIGHT);Combine_layers=0;Part="$(STORAGE_PART)";Column_widths=[];Additional_spacing=$(STORAGE_SPACING);Inner_wall_thickness=$(INNER_WALL);Outer_wall_thickness=$(OUTER_WALL);Bottom_thickness=$(FLOOR);Layer_marking="false";Resolution=$(RESOLUTION)
 
 # storage_piece,<layers>,<active>,<cols>,<rows> -> declares one .stl + shared PARAMS.
 define storage_piece
